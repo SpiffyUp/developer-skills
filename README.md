@@ -10,15 +10,15 @@ install, nothing to execute.
 
 | Skill | What it does |
 |---|---|
-| [`api-usage-audit`](./skills/api-usage-audit) | Works out where your API calls go, what you can cut, and which limits you're working around |
+| [`integration-audit`](./skills/integration-audit) | Where your API calls go, what they cost against your quota, and what you can cut |
 
 ## Using one
 
 Paste this into your AI tool from inside your project:
 
 ```
-Read https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/api-usage-audit/SKILL.md
-and follow it to audit how this project uses the Spiffy API.
+Read https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/SKILL.md
+and follow it to audit how this project integrates with Spiffy.
 ```
 
 Each skill's own README covers what it produces and when it's worth running.
@@ -38,7 +38,3 @@ tell us.
 
 Skills read your code and write a file. They don't change your code and they
 don't send anything anywhere. Sharing anything with us is your call.
-
-## Feedback
-
-**support@spiffy.co** — including anything a skill got wrong.

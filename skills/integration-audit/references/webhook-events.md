@@ -75,8 +75,8 @@ These are lifecycle transitions. There is no generic `subscription:updated`.
 | `customer:marketing:opted_in` | A customer opts in to marketing |
 | `customer:note:added` | A note is added to a customer |
 
-Both are activity events. Neither is a create/update/delete signal — see
-SPF-GAP-007.
+Both are activity events. Neither is a create/update/delete signal, so neither
+substitutes for mirroring customers.
 
 ### product / upsell (2)
 
@@ -299,8 +299,6 @@ Consequences, all of them permanent:
   for more than about 35 hours, or the endpoint auto-disables at 50 consecutive
   failures, those events are lost with no way to get them back.
 
-This is SPF-GAP-008.
-
 ### The rule that follows
 
 **Any recommendation to replace polling with webhooks must pair the webhook with
@@ -325,21 +323,18 @@ mistake. Do not suggest a fix that does not exist.
   checkouts or affiliates.** `customer:marketing:opted_in`, `customer:note:added`
   and `affiliate:registered` exist, but none of them is a CRUD signal, and
   `product:purchased` describes a purchase rather than a catalog change. Mirroring
-  any of these resources requires polling. (**SPF-GAP-007**)
+  any of these resources requires polling.
 - **No `subscription:updated`.** Only the 14 lifecycle transitions listed above.
   A field edit that does not cross one of those transitions produces no event.
-  (**SPF-GAP-007**)
 - **No price-change or discount events.** Changing a price, or applying or
   removing a subscription discount, fires nothing. `promo:applied` fires at
   checkout on an order; it is not a promo-object change event.
-  (**SPF-GAP-007**)
 - **No report-run-completed event.** A report run's completion has to be polled.
-  (**SPF-GAP-007**)
 - **No delete events at all.** No family has one. A hard delete also never
   appears in an `updated_at` delta, because the row is gone, so an incremental
   sync alone cannot detect it. Catching deletions requires a periodic full
-  reconciliation against the live list. (**SPF-GAP-009**)
-- **No replay or backfill**, as above. (**SPF-GAP-008**)
+  reconciliation against the live list.
+- **No backfill**, as above.
 
 ## Endpoint management
 
