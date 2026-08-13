@@ -13,7 +13,8 @@ and say so in one line rather than padding it.
 
 **Generated:** <date>
 **Audit mode:** <Full | Interview-only>
-**Confidence:** <High | Medium | Low> — <one line on why>
+**Confidence:** <High | Medium | Low — pick the nearest; the sentence carries the
+nuance> — <one line on why, naming the weakest input the numbers rest on>
 
 Volume figures are estimates derived from source code and from answers given
 during the audit, not from measured traffic. Each carries a tag: `measured`
@@ -183,6 +184,18 @@ of work — a reconciliation sweep can be caused by more than one at a time. Ass
 the cost to the one that best explains it and cross-reference from the others.
 Counting the same calls repeatedly inflates the totals.
 
+**But don't leave the root cause with no number.** When a blocker explains an
+entire architecture — "we couldn't verify signatures, so we poll everything" —
+state the traffic it accounts for as **explains: ~n calls/month**, distinct from
+the **costs:** line used for attribution. Otherwise the most important finding in
+the report is the only one without a figure attached, and it reads as the least
+important.
+
+**Savings compound, they don't add.** Fixing an N+1 and raising `per_page` on the
+same loop don't sum — the second applies to what's left after the first. Say the
+savings are sequential, and give a single post-fix total rather than inviting the
+reader to add up the individual lines.
+
 **If a section is empty, say so.** An integration with no feedback findings is a
 real and good outcome. Inventing one to fill the section destroys the value of
 comparing these reports.
@@ -210,5 +223,13 @@ blocked them. Quote rather than paraphrase, but strip anything identifying.
 **If there is nothing to report, say so and leave the block out.** An empty
 summary is a good outcome, not a gap to fill.
 
-**Never submit it.** Produce it, tell the developer it's there, and stop. They
-send it, through whatever channel they're already using, or not at all.
+**Security findings never go in it.** Those are the developer's own exposure, not
+feedback about Spiffy, and a summary that names their vulnerabilities is not safe
+to share. Keep them in the private report.
+
+**Naming a Spiffy endpoint is fine; naming their code is not.** "The payments
+list has no `updated_at` filter" describes Spiffy's API and belongs in the
+summary. "`sync.js:61` calls it" describes their codebase and does not. The
+prohibition is on their architecture, not on ours.
+
+**Never submit it.** Produce it, tell the developer it's there, and stop.

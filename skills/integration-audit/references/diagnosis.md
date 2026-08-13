@@ -47,8 +47,14 @@ fetches, not what it actually fetches.
 Build the call budget, rank by share of total, and work down from the top.
 
 Concentrate on what dominates. An integration's traffic is usually one or two
-call sites and a long tail of irrelevance; a finding that saves 0.1% is noise
-even when it's correct. Say so rather than padding the report with it.
+call sites and a long tail of irrelevance; a pure-efficiency finding that saves
+0.1% is noise even when it's correct. Say so rather than padding the report.
+
+**That threshold applies to efficiency only.** A correctness bug — a filter that
+silently does nothing, a delta that misses rows, a sync that is quietly wrong —
+is a finding regardless of what it costs, because the developer is acting on bad
+data and doesn't know it. When the two rules disagree, correctness wins. Rank by
+volume, but say plainly that the severity is correctness rather than cost.
 
 ## Step 3 — Establish intent
 
@@ -145,7 +151,32 @@ something on it is not thereby a finding.
 - Retrying into a 429, or ignoring `Retry-After`
 - A wide rolling date window standing in for a delta filter
 - Client-side filtering, joining, or deduping of a full result set
+- Records joined on email rather than a stored Spiffy id, or `search=` used to
+  resolve identity — a correctness and security problem before it's a cost one
+- A local mirror rebuilt by re-fetching rather than updated from event payloads
+- Webhook writes with no idempotency key, or that assume delivery order
 - Anything with a comment explaining why it's odd — read the comment, then ask
+
+## Measure against the recommended shape
+
+`webhook-events.md` describes how a well-built integration keeps a local copy in
+sync: mirror from the payload, dedupe on the envelope id, don't trust ordering,
+acknowledge fast and own the retry after, keep a delta sweep for the backfill
+gap, and store Spiffy ids rather than email as join keys.
+
+Use it as the reference architecture. Where an integration diverges, work out
+which of the three categories the divergence falls into rather than assuming they
+got it wrong — plenty of divergence is a reasonable response to a constraint you
+haven't found yet.
+
+Divergence that is *always* worth reporting, whatever the reason:
+
+- **Joining on email**, because the failure mode is mis-linking one customer to
+  another's data.
+- **Non-idempotent webhook writes**, because at-least-once delivery guarantees
+  they will eventually double-apply.
+- **No reconciliation path at all**, because there is no backfill and the data
+  loss is permanent and silent.
 
 ## Rules
 

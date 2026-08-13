@@ -67,7 +67,8 @@ State your mode to the user before continuing, and record it in the report.
   reason before assigning a fix to anyone.
 - Never recommend removing a reconciliation sweep. Spiffy can retry an event
   already queued to an endpoint, but cannot backfill one that was never queued,
-  so a periodic delta sweep is correct design, not waste.
+  so a periodic delta sweep is correct design, not waste. Recommending a
+  *different cadence* is fine — that's tuning, not removal.
 
 Violating the letter of these rules is violating their spirit. If you catch
 yourself reasoning "this capability is standard, so it probably exists" — stop.
@@ -107,10 +108,19 @@ From the code wherever it exists: cron expressions, `setInterval`, queue
 schedules, retry configuration, workflow definitions. Tag each call site
 `measured` (cadence found in code) or needs-asking.
 
-A cron expression written in a **comment**, with no scheduler config in the
-project, is weaker evidence than a real schedule. Tag it `measured` but add a
-"needs confirmation" entry naming the crontab or job runner that would settle it
-— the whole budget scales off these numbers.
+Cadence evidence comes in three strengths, and the whole budget scales off it:
+
+- **Scheduler config present in the project** — a crontab, workflow file, queue
+  definition. Tag `measured`.
+- **A comment that names where the schedule lives** ("cron `0 3 * * *`, see
+  `ops/crontab`"). Tag `measured`, and add a needs-confirmation entry pointing at
+  that file. The author told you where to check.
+- **A bare comment with no scheduler anywhere.** Tag `assumed` and say what would
+  settle it.
+
+Don't flatten these. Marking a well-evidenced cadence `assumed` makes the whole
+report read as shakier than it is, which costs you credibility on the findings
+that matter.
 
 ### 5. Build the call budget
 
@@ -167,6 +177,18 @@ Step 5 of `diagnosis.md`. Each finding lands in exactly one of:
 
 Only the first category tells someone to change their code.
 
+**Classify the issue, not the call site.** One call site routinely produces more
+than one finding in more than one category — a customer poll can be both "no
+event covers this, so polling is unavoidable" *and* "the poll itself is missing
+`updated_at.gte`". Split those into separate findings and cross-reference them.
+"Exactly one" constrains each finding, not each piece of code.
+
+**When the API let them get it wrong, say both parts.** An unrecognized filter
+key has a fix (use the real key) *and* a reason it survived to production (the
+request returned 200 with the full list and gave them no way to notice). Put the
+fix in the fix section and the silent failure in the feedback section. Reporting
+only the fix hides the part Spiffy needs to hear.
+
 ### 8. Webhook migration pass
 
 For each polled resource, check `webhook-events.md` for coverage.
@@ -201,8 +223,9 @@ If there are no findings, say so in a line. Don't invent any.
 
 ### 10. Write the report
 
-Follow `references/report-template.md`. The output file must be named
-`spiffy-integration-diagnostics.md`.
+Follow `references/report-template.md`. Name the output
+`spiffy-integration-diagnostics.md` unless the user asks for a different path, in
+which case use theirs and note the intended name at the top of the file.
 
 ### 11. Redact, then build the shareable summary
 

@@ -313,6 +313,73 @@ The sweep is not a fallback to the old polling cadence. Going from a 5-minute
 poll to webhooks plus a nightly sweep still removes almost all of the call
 volume, which is the entire point.
 
+## Keeping a local copy in sync
+
+The recommended architecture for anything that mirrors Spiffy data — a
+warehouse, a fulfilment system, a customer portal. Measure an integration
+against this; it's what "using the API well" looks like.
+
+**Build the mirror from the payload, not from follow-up reads.** Order-family
+events carry a fully expanded order, so a receiver can write its local copy with
+zero API calls. An integration that receives an event and then fetches the same
+object has paid for data it was already handed.
+
+**Dedupe on the envelope `id`.** It's stable across every retry of an event, so
+it's the natural idempotency key. Delivery is at-least-once — the same event
+*will* arrive twice eventually, and an upsert that isn't idempotent will
+double-apply.
+
+**Don't trust arrival order.** Ordering is not guaranteed. A
+`subscription:canceled` can land after a later state change and overwrite it.
+Compare the object's own state or timestamps before writing, rather than assuming
+the newest delivery is the newest truth.
+
+**Acknowledge fast, then own the retry.** A delivery counts as successful on a
+2xx within 10 seconds. Respond first and do the write asynchronously — but
+understand that once you've returned 200, Spiffy considers it delivered and will
+never resend it. Any failure after that point is yours to retry, from your own
+queue.
+
+**Keep a delta sweep as the safety net.** Events are only queued for endpoints
+active when they fire, so anything that happened while your endpoint was down,
+disabled or unsubscribed is unrecoverable. A low-frequency
+`filter[updated_at.gte]=<last successful run>` sweep closes that hole. Use the
+last *successful* run as the lower bound, not a fixed window, so an outage widens
+the next sweep automatically.
+
+**And a periodic full resync, at much lower frequency.** Deltas cannot surface
+records that disappear — see the deletion and merge notes below.
+
+### Identity keys — store ids, never email
+
+Store the Spiffy `id` for every object you mirror, and use it as the join key
+against your own records. Capture it at the first point of association — the
+order or checkout event that created the relationship — and keep it.
+
+**Email is not an identifier.** It is mutable, customers change it, several
+people can share one, and merging reassigns it. An integration keyed on email
+will silently mis-link records the first time any of those happen, and
+mis-linking one customer to another's orders is a data breach rather than a bug.
+
+Matching by email is also weaker than it looks. `search=` matches partially and
+across `name_first`, `name_last` and `email` at once, so it can return a
+different customer entirely — see `security-checks.md` S8. If you must resolve by
+email, use the exact filter `filter[email]=`, treat the result as a candidate
+rather than an identity, and store the returned `id` so you never have to do it
+again.
+
+**Ids can disappear, and nothing tells you.** Merging two customers deletes the
+secondary record, and there is no merge event and no delete event. A stored
+`customer_id` can therefore start returning 404 with no signal. Handle a missing
+id as "re-resolve and re-link", not as "the customer is gone", and let the
+periodic full resync catch what the deltas cannot.
+
+### What not to cache
+
+Values Spiffy computes rather than stores — promo usage tallies, customer stats,
+aggregate counts — are derived at read time and go stale immediately. Cache the
+objects, not the arithmetic over them.
+
 ## Coverage gaps — what you must still poll for
 
 These absences are real. When a developer's polling loop covers one of them,

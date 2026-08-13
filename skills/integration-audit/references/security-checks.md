@@ -120,6 +120,37 @@ checkoutview.
 
 ---
 
+## S8 — Resolving Spiffy records from user-supplied input
+
+**Look for:** a request handler that takes an email, order id, or customer id
+from the client — a query string, form field, or request body — and uses it to
+look up Spiffy data, without first checking that the caller owns that record.
+
+**Why:** this is the shape of an enumeration bug. If the identifier arrives from
+the browser and is passed to Spiffy, anyone can iterate it and read orders and
+customer records that aren't theirs. Spiffy payloads carry names, emails,
+addresses and partial card details, so the blast radius is real.
+
+**Say:** resolve identity from *your own* authenticated session, then use the
+Spiffy id you stored against that user. Never let a client-supplied value select
+which Spiffy record to return.
+
+### The `search=` trap specifically
+
+`search=` on customers matches across **`name_first`, `name_last` and `email`
+together**, as a partial match — not an exact one. So `?search=<email>` can
+return a customer whose *name* happens to contain that string, and can return
+several customers.
+
+Using it to answer "which customer is this?" is wrong twice over: it's a
+correctness bug, because a match is not an identity, and a security bug, because
+the first result may be someone else. If you must look up by email, use the exact
+filter `filter[email]=` — and see the note on identity keys in
+`webhook-events.md`, because email is a poor identifier even when matched
+exactly.
+
+---
+
 ## S7 — Mishandled OAuth refresh tokens
 
 Only applies to integrations using OAuth rather than an account API key.
