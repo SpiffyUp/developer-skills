@@ -12,7 +12,7 @@ or anything else that can read your project.
 Paste this into your AI tool, from inside your project:
 
 ```
-Read https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/api-usage-audit/SKILL.md
+Read https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/api-usage-audit/SKILL.md
 and follow it to audit how this project uses the Spiffy API.
 ```
 
