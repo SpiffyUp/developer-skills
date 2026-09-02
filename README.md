@@ -10,7 +10,7 @@ install, nothing to execute.
 
 | Skill | What it does |
 |---|---|
-| [`integration-audit`](./skills/integration-audit) | Where your API calls go, what they cost against your quota, and what you can cut |
+| [`integration-audit`](./skills/integration-audit) | Where your API calls go, what they cost against your quota, and what you can cut — including the per-visit calls that burn a month's quota in days |
 
 ## Using one
 

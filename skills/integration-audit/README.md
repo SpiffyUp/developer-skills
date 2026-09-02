@@ -3,6 +3,12 @@
 Works out where your Spiffy API calls actually go, what they cost against your
 rate limit and monthly quota, and what you can cut.
 
+If your quota disappears in the first few days of the month, this is the thing
+to run. That pattern almost always means a call sits somewhere your own users
+trigger — a page load, a session, a component render — so its cost scales with
+your traffic rather than your data, and nothing in your scheduler config shows
+it.
+
 Run it in whatever AI coding tool you already use — Claude Code, Cursor, ChatGPT,
 or anything else that can read your project.
 
@@ -25,6 +31,16 @@ measured against your plan's monthly quota and the per-minute limit. This is the
 core of it — most integrations cost far more than they need to, and usually it's
 one or two call sites doing nearly all of it.
 
+Each call site is costed by what actually multiplies it: a schedule, your
+traffic, your record count, or your order volume. Traffic-driven calls are the
+ones that exhaust a month's quota in days, and they're the easiest to miss —
+the multiplier lives in your analytics, not in your code. Where demand is over
+the ceiling you get a days-to-exhaustion figure rather than a percentage.
+
+Calls that genuinely have to happen per user — minting a portal SSO token, a
+write someone just asked for — are sized and left alone. They can't be cached
+and the audit won't pretend otherwise.
+
 **Changes worth making.** Concrete fixes using capabilities that already exist:
 pagination you're leaving on the table, `include=` that collapses an N+1,
 `updated_at.gte` instead of a full resync, polling that a webhook would replace,
@@ -33,6 +49,11 @@ and filter keys that are silently doing nothing.
 That last one is worth running the audit for on its own. An unrecognized filter
 key doesn't error — the request returns 200 with the whole unfiltered list. The
 code looks right, the logs look right, and you're paging your entire table.
+
+It also checks polling loops against the current event catalog. Customers,
+products and promos emit create/update/delete events now, and integrations
+written before that shipped are often still polling resources that would push to
+them instead.
 
 **A short security pass** covering Spiffy-specific exposure only: API keys
 reaching client code, webhook signature verification, secret handling. Spiffy API

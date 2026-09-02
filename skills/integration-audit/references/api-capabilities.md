@@ -1,7 +1,7 @@
 # Spiffy API v2 — capability catalog
 
-Generated 2026-08-13 against API v2. Derived from server source, not published
-documentation.
+Generated 2026-09-02 against API v2 on `master`. Derived from server source, not
+published documentation.
 
 **This catalog is closed-world.** If a capability is not listed here, it does not
 exist. Do not infer capabilities from REST convention, from other APIs, or from
@@ -9,7 +9,7 @@ what would be reasonable. If something a developer needs is absent, that is a
 finding for Part 2 of the report, not a gap in this document.
 
 Everything below applies to `/v2` endpoints reached with an account API key or an
-OAuth access token. It says nothing about v1.
+OAuth access token.
 
 ## Pagination
 
@@ -105,6 +105,19 @@ Operators, appended to the field name after a dot:
 | `.null` | is / is not null | `.null=true` → `IS NULL`; `.null=false` → `IS NOT NULL` |
 
 There is no `between`. Use `.gte` plus `.lte` on the same field.
+
+**`.in` on an id field is the closest thing to a batch read.** Any filterable
+field accepts any operator in the table — the whitelist is applied per field,
+not per field-and-operator — so `?filter[id.in]=101,102,103&per_page=100` fetches
+up to a hundred records by id for **one** request. Wherever an integration
+resolves a list of ids by looping single `GET /v2/{resource}/{id}` calls, this
+collapses it, and the saving is the loop length. The same applies to foreign
+keys: `?filter[customer_id.in]=...`.
+
+Two limits on it. The ids have to be known already — this is a batch *fetch*,
+not a search — and the URL has to stay a sane length, so chunk at 100 to match
+`per_page`. Check the per-resource table below to confirm the field is
+filterable at all before recommending it.
 
 Multiple filters, and multiple operators on one field, combine with AND. There is
 no OR across different fields.
@@ -206,7 +219,7 @@ silently dropped.
 | Endpoint | Available `include=` values |
 |---|---|
 | `GET /v2/customers`, `GET /v2/customers/:id` | `cards`, `fields`, `stats`, `integrations`, `integration_mappings`, `subscriptions` |
-| `GET /v2/orders`, `GET /v2/orders/:id` | `fields`, `integrations`, `items`, `payments`, `subscriptions`, `paymentplans`, `customer`, `affiliate`, `checkout`, `checkoutview` |
+| `GET /v2/orders`, `GET /v2/orders/:id` | `fields`, `integrations`, `items`, `payments`, `subscriptions`, `paymentplans`, `customer`, `affiliate`, `checkout`, `attribution`, `checkoutview` |
 | `GET /v2/subscriptions`, `GET /v2/subscriptions/:id` | `payments`, `usage`, `custom_fields`, `customer`, `order` |
 | `GET /v2/paymentplans`, `GET /v2/paymentplans/:id` | `items`, `payments`, `order`, `customer`, `custom_fields`, `card`, `gateway` |
 | `GET /v2/payments`, `GET /v2/payments/:id` | `customer`, `order` |
@@ -288,27 +301,136 @@ a developer's code as an oversight on their part.
   `Last-Modified` semantics of its own, and no handler short-circuits on request
   validators. A repeated identical GET costs a full query and a full quota unit.
 - **Bulk / batch writes.** Every write is one resource per request.
-- **A general bulk export or CSV endpoint.** See below for the one exception.
+- **A general bulk export of a raw resource.** There is no way to ask for "every
+  order" or "every customer" as a file. Two narrower bulk paths do exist — see
+  Bulk reads below and the reports section — but neither is a raw dump of a v2
+  list resource.
 
 ## Bulk reads
 
-There is one endpoint in v2 that returns a whole dataset in a single call:
+Two paths return a whole dataset without paginating. Both are narrow.
+
+**Affiliate payout commissions:**
 
 ```
 GET /v2/affiliates/payouts/:payout_id/download
 ```
 
-It returns `text/csv` containing every commission row in that payout, with no
+Returns `text/csv` containing every commission row in that payout, with no
 pagination and no `per_page` ceiling — one request and one quota unit, instead of
 one request per page of `GET /v2/affiliates/payouts`. Use it whenever the goal is
 the full commission set for a payout rather than a filtered slice.
 
-No equivalent exists for customers, orders, subscriptions, paymentplans, payments,
-products or events. For those, the cheapest full read is `per_page=100` plus the
-narrowest filter that satisfies the use case, and for ongoing sync it is
-`updated_at.gte` deltas plus webhooks. If a developer needs a bulk export of one
-of those resources, that is a genuine gap and belongs in the report — do not
-invent an endpoint for it.
+**A report run export**, covering the six report types documented below. The
+download itself is unmetered, so a full pull costs roughly four requests at any
+size. This is the cheapest bulk path in the API — but it returns a *report*,
+shaped and grouped by that report type, not the underlying resource rows.
+
+Neither is a raw export. For a full read of customers, orders, subscriptions,
+paymentplans, payments, products or events as v2 objects, the cheapest route is
+`per_page=100` plus the narrowest filter that satisfies the use case, and for
+ongoing sync it is `updated_at.gte` deltas plus webhooks. If a developer needs a
+raw bulk export of one of those resources, that is a genuine gap and belongs in
+the report — do not invent an endpoint for it, and check whether a report type
+already answers the question before calling it a gap.
+
+## Aggregates without pagination
+
+`POST /v2/analytics/query` answers in one request what would otherwise be a
+paginated read plus client-side arithmetic. Scope: `analytics`.
+
+**Metrics.** Orders family: `revenue`, `orders`, `aov`, `customers`,
+`conversion_rate`, `ltv`. Subscriptions family: `active_subscriptions`,
+`new_subscriptions`, `churned_subscriptions`, `mrr`. Billing family: `refunds`,
+`refund_count`, `failed_payments`. One query can mix families.
+
+**Grouping.** By interval (`day`, `week`, `month`) for a time series, or by
+dimension: `channel`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`,
+`utm_content`, `referring_domain`.
+
+Constraints that produce errors or wrong answers if missed:
+
+- **Dimension grouping is orders-family only.** A subscriptions or billing
+  metric grouped by a dimension is a 400.
+- `conversion_rate` cannot be grouped by interval.
+- **`active_subscriptions` and `mrr` are point-in-time values**, reported as of
+  the end of each bucket. Summing buckets is wrong.
+- `compare` — `previous_period` or an explicit range — returns a previous value
+  alongside each metric, so period-over-period is one request, not two.
+- `totals` comes back alongside `groups`; a second unbucketed query is wasted.
+- **UTC only.** No account timezone, unlike reports.
+- `revenue` is dated by payment collection and is **not** reduced by refunds —
+  `refunds` is a separate metric.
+
+`GET /v2/analytics/capabilities` returns the metric and dimension catalog with
+each metric's legal groupings. Validate against it rather than spending a
+request discovering a 400.
+
+There is no analytics coverage outside this metric list — no funnels, no custom
+cohorts, no arbitrary dimensions.
+
+## Reports — the cheapest bulk path
+
+Six report types: `product_sales`, `customer_cohort_ltv`, `checkout_performance`,
+`affiliate_performance`, `payment_plan_performance`, `attribution_performance`.
+Scope: `reports`. Reports are timezone-aware, unlike analytics.
+
+Call `GET /v2/reports/types` first — it returns each type's valid filters,
+datasets, columns and date presets. Guessing filter names wastes requests.
+
+The flow, and what each step costs:
+
+| Step | Cost |
+|---|---|
+| `POST /v2/reports` — create a saved report | 1, once ever |
+| `POST /v2/reports/{id}/runs` — start a run | 1 |
+| `GET /v2/reports/{id}/runs/{run_id}` — poll for completion | 1 per poll |
+| `GET .../runs/{run_id}/results?per_page=100` | 1 per page |
+| `POST .../runs/{run_id}/exports` — mint a download token | 1 |
+| **`GET /v2/reports/exports/{token}` — download the CSV** | **0 — unmetered** |
+
+The download route carries no authentication and no limiter; the signed token in
+the path is the credential, and it is short-lived. It streams the full dataset
+with no row cap. **A complete bulk pull therefore costs about four requests**
+regardless of size — a run, a couple of polls, an export — against one request
+per hundred records for the equivalent paginated read.
+
+Three things to get right:
+
+- **Runs are asynchronous.** `POST .../runs` returns pending. Requesting results
+  or an export before completion is a 409. Poll with backoff — a tight poll loop
+  is where the saving gets spent.
+- **Grand totals ship inline** on the completed run. If those answer the
+  question, the results pages never need fetching.
+- **Rows are grouped hierarchically.** Summing across all levels double-counts.
+  Sum one level, or use the inline totals.
+
+There is no webhook for run completion; polling is the only signal.
+
+## Surfaces that cost no API calls at all
+
+`<spiffy-element>` renders Spiffy-owned UI client-side, in an iframe, with no
+call from the developer's backend and no quota cost at any traffic level:
+
+| `type` | Attributes | Renders |
+|---|---|---|
+| `checkout` | `url` (required) | An inline checkout |
+| `customer-portal` | `token` (optional) | The customer's subscriptions, payment plans and orders |
+| `affiliate-portal` | `token` (optional) | The affiliate portal |
+| `affiliate-register` | — | The affiliate registration form |
+| `subscription` | `ref` (required), `token` | One subscription's management view |
+| `payment-plan` | `ref` (required), `token` | One payment plan's management view |
+
+Elements mount on insertion, so client-side route changes need no extra step.
+
+`token` is a per-user SSO magic-link token that signs the customer or affiliate
+in directly; without it the element shows a login form. Minting that token is one
+call per user session and is **irreducible** — the token is single-use and
+short-lived, so it cannot be cached or shared. `ref` is resolved the same way.
+
+This replaces a hand-built portal, not a data feed. Where a developer needs the
+values inside their own interface, it is not a substitute — the API read is the
+right call and the fix is to scope or cache it, not to embed.
 
 ## Rate limits and quotas
 
@@ -317,6 +439,35 @@ traffic authenticated with an account API key. An approved third-party developer
 application is metered against its own allocation, set when developer access is
 granted; the limits below are still the right numbers to design against, because
 any integration a merchant installs with their own key lands squarely on them.
+
+### What counts as one request
+
+Every metered request costs exactly **one unit**. There is no per-endpoint
+weighting, no discount for a cheap call, and no surcharge for an expensive one.
+That single fact drives most of the optimisation advice in this catalog: one
+request returning 100 records costs a hundredth of what 100 single-record
+requests cost, and `include=` is free.
+
+The unit is counted **before the handler runs**, which has consequences that
+routinely surprise developers:
+
+- **A response size of zero still costs one unit.** An empty page at the end of
+  a pagination loop is a full request.
+- **Errors count, except authentication failures.** A rejected credential is
+  refused before metering and is free. Everything after that — a scope failure,
+  a 404, a validation error, a server error — has already been counted.
+- **A 429 counts.** Both kinds. The request that trips the limit is itself
+  metered, and so is every request that bounces off it afterwards.
+- **A burst 429 costs a monthly unit**, because the monthly counter is
+  incremented before the per-minute limiter is reached. A client that hammers
+  the API and gets throttled is still spending its monthly allowance on the
+  rejections. This makes an unbacked-off retry loop far more expensive than it
+  appears — it burns quota at full speed while receiving nothing.
+- **MCP tool calls draw on the same pool.** There is no separate allowance for
+  the Spiffy connector; every tool call is one unit against the same monthly
+  quota as HTTP traffic. An assistant left running against an account competes
+  with that account's integrations. (Help-doc lookups are the exception and are
+  not metered.)
 
 ### Per-minute limit
 
@@ -385,14 +536,49 @@ account. Account owners and managers are emailed once per month when usage cross
 
 ### What this means for call budgeting
 
-At the 10,000/month tier, sustained polling has to fit in roughly 13 calls per
-hour across the whole account, for every integration installed on it. A five-minute
-cron that pages three resources is already over budget before a second integration
-exists. The arithmetic that matters in an audit is:
+At the 10,000/month tier, an account has roughly **13 requests per hour** to
+spend across everything installed on it. That is the whole budget, shared.
+
+The arithmetic that matters in an audit generalises past scheduled work, because
+a schedule is only one of the things that can multiply a call site:
 
 ```
-calls per run x runs per day x 30  vs  the account's monthly allowance
+calls per occurrence x occurrences per day x 30  vs  the account's monthly allowance
+```
+
+An *occurrence* is whatever makes the call happen again — a cron tick, a page
+view, a user session, a received webhook, a record in a batch. Identifying it
+correctly is the whole job; see `diagnosis.md`.
+
+**Traffic-driven call sites are the ones that exhaust a quota in days rather
+than weeks**, because their multiplier is the developer's own success and has no
+ceiling in the code. Three calls on a page view, at 1,200 views a day, is 3,600
+requests a day — a 10,000 quota is gone on day three, and nothing about the
+integration's data changed. A scheduled job's cost is visible in a crontab. A
+traffic-driven cost is visible only in traffic.
+
+The reciprocal is the figure worth quoting to a developer who is already over:
+
+```
+days to exhaustion = monthly allowance / (calls per occurrence x occurrences per day)
 ```
 
 Every page of a paginated read counts as one call. So does every 429, and every
 request whose filters were silently ignored.
+
+### Measure rather than estimate, where you can
+
+Every response carries `X-Monthly-RateLimit-Remaining`. Reading it twice, an
+hour apart, yields a real consumption rate for the whole account with no
+arithmetic and no assumptions — and it captures traffic the audit cannot see at
+all, including other integrations, dashboards and MCP tool calls sharing the
+same pool.
+
+Prefer that over an estimate whenever the developer can get it. Estimates from
+source are a floor: they measure what this codebase intends to send, not what
+the account actually spends. Where the two disagree, the header is right and the
+difference is itself a finding worth chasing.
+
+`X-Monthly-RateLimit-Limit` on the same response is also the only reliable
+statement of that account's allowance, since an override supersedes the tier
+table.

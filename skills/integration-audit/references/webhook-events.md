@@ -1,6 +1,6 @@
 # Spiffy webhook events — catalog
 
-Generated 2026-08-13 against API v2. Derived from server source.
+Generated 2026-09-02 against API v2 on `master`. Derived from server source.
 
 **This catalog is closed-world.** The event types below are the complete set. If
 a resource has no event listed here, mirroring it requires polling. Say so and
@@ -14,9 +14,14 @@ If this file and that endpoint disagree, the endpoint is right.
 
 ## Event types
 
-42 event types, in 9 families. An endpoint subscribes to an explicit list of
+52 event types, in 9 families. An endpoint subscribes to an explicit list of
 types, or to `"*"` for all of them. `"*"` is the default when an endpoint is
 created without an `events` array.
+
+**The `events` array is not validated against this list.** A misspelled type is
+accepted, stored, and simply never fires. There is no error at creation time and
+nothing in the delivery log to look at, because no delivery is ever attempted.
+Check every subscribed name character by character against the tables below.
 
 ### order (5)
 
@@ -68,24 +73,35 @@ These are lifecycle transitions. There is no generic `subscription:updated`.
 | `card:updated` | A card is updated |
 | `card:auto_updated` | A card is automatically updated |
 
-### customer (2)
+### customer (5)
 
 | Type | Fires when |
 |---|---|
+| `customer:created` | A customer record is created |
+| `customer:updated` | A customer field changes |
+| `customer:deleted` | A customer record is deleted |
 | `customer:marketing:opted_in` | A customer opts in to marketing |
 | `customer:note:added` | A note is added to a customer |
 
-Both are activity events. Neither is a create/update/delete signal, so neither
-substitutes for mirroring customers.
+The first three are CRUD signals and they mirror customers without polling.
+`customer:updated` fires on a real field change — re-saving an unchanged record
+emits nothing — so the event stream is not padded with no-op deliveries.
 
-### product / upsell (2)
+The last two are activity events and do not substitute for the CRUD three.
+
+### product / upsell (5)
 
 | Type | Fires when |
 |---|---|
+| `product:created` | A product is created |
+| `product:updated` | A product field changes |
+| `product:deleted` | A product is deleted |
 | `product:purchased` | A product is purchased |
 | `upsell:success` | An upsell succeeds |
 
-Both describe a purchase, not a change to the product catalog.
+The CRUD three track the catalog. `product:purchased` and `upsell:success`
+describe a purchase, not a catalog change — they are not a substitute for the
+CRUD events, and an integration mirroring the catalog wants the CRUD three.
 
 ### payment_plan (8)
 
@@ -100,17 +116,29 @@ Both describe a purchase, not a change to the product catalog.
 | `payment_plan:payment:upcoming` | A payment plan payment is upcoming |
 | `payment_plan:payment:success` | A payment plan payment succeeds |
 
-### promo (1)
+### promo (4)
 
 | Type | Fires when |
 |---|---|
-| `promo:applied` | A promo code is applied |
+| `promo:created` | A promo is created |
+| `promo:updated` | A promo field changes |
+| `promo:deleted` | A promo is deleted |
+| `promo:applied` | A promo code is applied at checkout, on an order |
 
-### affiliate (1)
+`promo:applied` is an order event, not a promo-object change event. The CRUD
+three are the ones that mirror the promo catalog — and they matter more here
+than elsewhere, because `GET /v2/promos` has no filters and no pagination at
+all, so polling promos means pulling the entire active set every time.
+
+### affiliate (2)
 
 | Type | Fires when |
 |---|---|
 | `affiliate:registered` | An affiliate is registered |
+| `affiliate:updated` | An affiliate field changes |
+
+There is no `affiliate:created` — registration *is* the creation signal — and no
+`affiliate:deleted`.
 
 There is also an internal `test` event type, emitted only by
 `POST /v2/webhook-endpoints/{id}/test`. It carries a fixed stub body, not a real
@@ -386,21 +414,33 @@ These absences are real. When a developer's polling loop covers one of them,
 that belongs in Part 2 of the report as a platform gap, not in Part 1 as their
 mistake. Do not suggest a fix that does not exist.
 
-- **No `created` / `updated` / `deleted` events for customers, products, promos,
-  checkouts or affiliates.** `customer:marketing:opted_in`, `customer:note:added`
-  and `affiliate:registered` exist, but none of them is a CRUD signal, and
-  `product:purchased` describes a purchase rather than a catalog change. Mirroring
-  any of these resources requires polling.
+- **No CRUD events for checkouts.** Customers, products and promos all have a
+  full `created` / `updated` / `deleted` set, and affiliates have `registered` +
+  `updated`. Checkouts have none, so mirroring them still requires polling
+  `GET /v2/checkouts` on its `updated_at` filter.
+
+  **These CRUD events are recent.** An integration that polls customers,
+  products or promos on a schedule was very likely built when polling was the
+  only option — this is the single most common reason an otherwise well-built
+  integration is over quota today. Treat it as a fix-section finding, but do not
+  write it up as a mistake: check whether the polling predates the events, and
+  if it does, say so. The developer did the right thing with what existed.
 - **No `subscription:updated`.** Only the 14 lifecycle transitions listed above.
   A field edit that does not cross one of those transitions produces no event.
 - **No price-change or discount events.** Changing a price, or applying or
   removing a subscription discount, fires nothing. `promo:applied` fires at
   checkout on an order; it is not a promo-object change event.
 - **No report-run-completed event.** A report run's completion has to be polled.
-- **No delete events at all.** No family has one. A hard delete also never
-  appears in an `updated_at` delta, because the row is gone, so an incremental
-  sync alone cannot detect it. Catching deletions requires a periodic full
-  reconciliation against the live list.
+- **Delete events cover only customers, products and promos.** Those three emit
+  `deleted`. Nothing else does — orders, subscriptions, payment plans, checkouts
+  and affiliates have no delete signal. A hard delete also never appears in an
+  `updated_at` delta, because the row is gone, so for those resources an
+  incremental sync alone cannot detect a removal and a periodic full
+  reconciliation against the live list is the only way to catch one.
+
+  Customer merges remain invisible even with `customer:deleted`: merging
+  reassigns records and there is no merge event, so a stored id can start
+  returning 404 with no signal. See the identity-keys note above.
 - **No backfill**, as above.
 
 ## Endpoint management

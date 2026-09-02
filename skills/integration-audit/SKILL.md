@@ -1,6 +1,6 @@
 ---
 name: auditing-spiffy-integration
-description: Use when a developer wants to review, diagnose, or optimize how their application integrates with Spiffy — including questions about API call volume, hitting rate limits or the monthly quota, whether to use webhooks instead of polling, or when Spiffy has asked them to run an integration diagnostic.
+description: Use when a developer wants to review, diagnose, or optimize how their application integrates with Spiffy — including questions about API call volume, exhausting the monthly quota or hitting rate limits, 429s and monthly_limit_exceeded errors, calls made per page view or per user visit, whether to use webhooks instead of polling, or when Spiffy has asked them to run an integration diagnostic.
 ---
 
 # Auditing a Spiffy integration
@@ -12,7 +12,15 @@ if they choose, send to Spiffy.
 **The core of this audit is API call volume**: where their requests go, what that
 costs against their rate limit and monthly quota, and how to bring it down.
 That's what most integrations get wrong and what most developers feel as pain.
-Keep it the spine of the report. A secondary pass covers Spiffy-specific
+Keep it the spine of the report.
+
+Cost is `calls per occurrence x occurrences per day x 30`, and the job is to
+identify what an *occurrence* is for each call site — a cron tick, a page view,
+a record, a received event. Scheduled work is the familiar case and the easiest
+to see; it is not the expensive one. **A call on a path the developer's own
+users trigger is what exhausts a monthly quota in days**, because its multiplier
+is their traffic, it is invisible in the code, and it grows as they succeed. Go
+looking for those specifically. A secondary pass covers Spiffy-specific
 credential exposure (`security-checks.md`), which is tightly scoped and must not
 expand into a general security review.
 
@@ -36,8 +44,9 @@ suspicion is reasonable — address it up front rather than waiting to be asked.
 ## Before you start — establish your mode
 
 1. Load the reference files from this skill's `references/` directory:
-   `api-capabilities.md`, `webhook-events.md`, `diagnosis.md`,
-   `security-checks.md`. If you cannot fetch URLs, ask the user to paste them.
+   `api-capabilities.md`, `webhook-events.md`, `usage-patterns.md`,
+   `diagnosis.md`, `security-checks.md`. If you cannot fetch URLs, ask the user
+   to paste them.
 2. Try to read the project's source.
 3. Set your mode:
 
@@ -65,6 +74,13 @@ State your mode to the user before continuing, and record it in the report.
   covered by this catalog" rather than inferring it.
 - **Never conclude from a code pattern alone why it was written.** Establish the
   reason before assigning a fix to anyone.
+- **Never flag an irreducible per-occurrence call.** A call is only a finding if
+  the same answer would serve more than one occurrence. Minting a portal SSO or
+  magic-link token is per user, single-use and short-lived by design; caching it
+  would be a security bug. A write the user just requested is the same. Size
+  these, say plainly that they cannot be reduced, and move on. Reducing their
+  *frequency* — one read per session rather than per request — is a real finding;
+  removing them is not.
 - Never recommend removing a reconciliation sweep. Spiffy can retry an event
   already queued to an endpoint, but cannot backfill one that was never queued,
   so a periodic delta sweep is correct design, not waste. Recommending a
@@ -82,9 +98,14 @@ order.
 
 ### 1. Scope and announce
 
-Confirm this project integrates with Spiffy API v2. Say what you're about to do
-and what you won't do. If the project only uses API v1, say that this audit
-covers v2 only and ask whether to continue anyway.
+Confirm this project integrates with the Spiffy API. Say what you're about to do
+and what you won't do.
+
+Ask now for the account's **measured** usage, because it takes them a minute and
+it reframes everything after it: the `X-Monthly-RateLimit-Remaining` header on
+any response, read twice an hour apart, or the usage figure in their Spiffy
+settings. It covers consumers this codebase cannot see. If they can't get it,
+carry on with estimates and say so in the report.
 
 ### 2. Inventory the call sites
 
@@ -102,33 +123,56 @@ Step 1 of `diagnosis.md`, and it comes before everything else. Check every filte
 key, event name, `include=`, `search=` and `sort=` value against the catalogs.
 These fail silently and return 200, so the developer has no way to notice.
 
-### 4. Determine cadence
+### 4. Determine what multiplies each call site
 
-From the code wherever it exists: cron expressions, `setInterval`, queue
-schedules, retry configuration, workflow definitions. Tag each call site
-`measured` (cadence found in code) or needs-asking.
+Not just cadence. Each call site is multiplied by one of five things, and
+naming it wrong changes the budget by orders of magnitude. `usage-patterns.md`
+carries the taxonomy:
 
-Cadence evidence comes in three strengths, and the whole budget scales off it:
+| Driver | Multiplier | Found in |
+|---|---|---|
+| **Scheduled** | runs/day | crontab, `setInterval`, queue or workflow config |
+| **Traffic** | page views, requests, sessions or users/day | the call sits in a request handler, render path, middleware or component |
+| **Data** | records or pages | a loop over a result set, or pagination |
+| **Event** | orders/payments/signups per day | a webhook handler or queue consumer |
+| **Fixed** | once, or a handful | boot, deploy, manual, one-off backfill |
 
-- **Scheduler config present in the project** — a crontab, workflow file, queue
+**A traffic multiplier is never in the code.** You can establish from source
+that a call site is traffic-driven — that is structural and visible — but the
+number itself has to come from the developer. Identify these on the first pass
+and carry them into the interview; they are the reason accounts die on day
+three, and an audit that budgets only the schedulers will conclude a dying
+integration is comfortably inside its quota.
+
+Evidence comes in three strengths, and the whole budget scales off it:
+
+- **Config present in the project** — a crontab, workflow file, queue
   definition. Tag `measured`.
-- **A comment that names where the schedule lives** ("cron `0 3 * * *`, see
+- **A comment that names where it lives** ("cron `0 3 * * *`, see
   `ops/crontab`"). Tag `measured`, and add a needs-confirmation entry pointing at
   that file. The author told you where to check.
-- **A bare comment with no scheduler anywhere.** Tag `assumed` and say what would
-  settle it.
+- **A bare comment with no config anywhere**, or a traffic figure you were not
+  given. Tag `assumed` and say what would settle it.
 
-Don't flatten these. Marking a well-evidenced cadence `assumed` makes the whole
-report read as shakier than it is, which costs you credibility on the findings
-that matter.
+Don't flatten these. Marking a well-evidenced multiplier `assumed` makes the
+whole report read as shakier than it is, which costs you credibility on the
+findings that matter.
 
 ### 5. Build the call budget
 
-For each call site: `calls per run × runs per month = calls per month`. Show the
-inputs.
+For each call site: `calls per occurrence × occurrences per month = calls per
+month`. Show the inputs, and name the driver.
 
 > Nightly, ~12,000 orders at `per_page=50` = 240 pages + 1 = 241 calls/run × 30
-> = **7,230 calls/month** [`measured` cadence, `stated` record count]
+> = **7,230 calls/month** [scheduled; `measured` cadence, `stated` record count]
+
+> 3 calls per page view × 1,200 views/day × 30 = **108,000 calls/month**
+> [traffic; `measured` call count, `stated` traffic]
+
+Where a traffic-driven site is over the ceiling, the reciprocal is the number
+that lands: `allowance ÷ (calls per occurrence × occurrences per day)` = **days
+to exhaustion**. A developer whose access dies every month recognises that figure
+immediately, and it explains the shape of the problem better than a percentage.
 
 Then total, rank by share of total, and compare against both ceilings:
 
@@ -152,7 +196,16 @@ Always establish:
 1. What the integration is for, in a sentence or two.
 2. How many Spiffy accounts or merchants it serves, and roughly how many records
    are in the resources it syncs.
-3. Their plan tier.
+3. Their plan tier, and their measured usage if they were able to get it.
+4. **The traffic figure for every traffic-driven call site you found** — page
+   views, requests, sessions or active users per day, whichever matches how the
+   call is triggered. Ask for a rough daily number and whether it is growing.
+   You cannot get this from the code and the budget is meaningless without it,
+   so do not let it drop off the list.
+5. **What else uses the account's quota** — other integrations, internal tools,
+   non-production environments on the same key, MCP connector usage. Both limits
+   are per account, not per key, so anything else installed competes with this
+   integration. Ask explicitly if their measured total exceeds what you found.
 
 Then, for each dominant call site, ask the two questions that matter:
 
@@ -192,6 +245,12 @@ only the fix hides the part Spiffy needs to hear.
 ### 8. Webhook migration pass
 
 For each polled resource, check `webhook-events.md` for coverage.
+
+Customers, products and promos have a full `created`/`updated`/`deleted` set,
+and affiliates have `registered` and `updated`. These are recent, so a poll
+against one of them was very likely correct when it was written — check whether
+it predates the events and say so in the finding rather than writing it up as an
+oversight.
 
 **If an event exists**, write a migration recipe. Lead with the strongest true
 argument: the payload usually already contains what they are re-fetching. For
@@ -264,3 +323,9 @@ file on their disk and what you say to them.
 | "I can't read the references but I know this API" | You don't. Stop and say so. |
 | "While I'm here, I'll review their auth and dependencies" | Out of scope. `security-checks.md` is the whole list. |
 | "The security findings are more interesting than the volume ones" | Call volume is the spine of this report. Keep it first. |
+| "No cron anywhere, so the integration is light" | Traffic-driven calls have no schedule. Check the request handlers. |
+| "It's one call, it's fine" | One call times their daily traffic is the whole quota. Cost it. |
+| "They should cache this" | Their portal SSO token can't be cached. Apply the irreducible test first. |
+| "Add caching" (and stop there) | Spiffy sets no ETag or Cache-Control. The cache has to be theirs — say so. |
+| "There's no `customer:updated` event" | There is now. Re-read `webhook-events.md` instead of recalling it. |
+| "Their numbers don't add up to the measured total" | That gap is a finding. Something else is on the same quota. |
