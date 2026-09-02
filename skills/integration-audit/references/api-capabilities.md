@@ -520,21 +520,26 @@ retry-loop for the rest of the month. Branch on the error `code`.
 
 Allowances by plan tier, as enforced in code:
 
-| Tier | Monthly requests |
-|---|---|
-| `pro_yr`, `pro_mo` | 10,000 |
-| `scale_yr`, `scale_mo` | 50,000 |
-| `highvol_yr`, `highvol_mo` | 20,000 |
-| `founders_yr`, `founders_mo` | 10,000 |
-| `compd`, `compd_native` | 10,000 |
-| `sandbox` | 10,000 |
-| `inactive` | 0 — every request 429s |
+| Tier | Plan name | Monthly requests |
+|---|---|---|
+| `pro_yr`, `pro_mo` | Pro | 10,000 |
+| `highvol_yr`, `highvol_mo` | Business | 20,000 |
+| `scale_yr`, `scale_mo` | Scale | 50,000 |
+| `founders_yr`, `founders_mo` | Founders (legacy) | 10,000 |
+| `compd`, `compd_native` | — | 10,000 |
+| `sandbox` | — | 10,000 |
+| `inactive` | — | 0 — every request 429s |
 
 An account whose tier is not in that list is treated as 0 until an override is set.
 
-Documentation elsewhere states 200,000 for High Volume. The enforced value is
-20,000. Use 20,000 in any calculation; a sizing exercise built on 200,000 will be
-off by an order of magnitude.
+A developer will tell you their plan name, not their tier key. **Business is the
+`highvol` tier at 20,000 — below Scale, despite sounding larger.** Do not reason
+from the name.
+
+Published documentation stated 200,000 for that plan for a period. If a developer
+sized their integration against that figure, their budget is out by an order of
+magnitude through no fault of their own, and that is the finding — not their
+arithmetic.
 
 An account can also carry an individual override that supersedes its tier, in
 either direction. **Read `X-Monthly-RateLimit-Limit` from a live response rather
