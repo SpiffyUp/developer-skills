@@ -28,7 +28,7 @@ during the audit, not from measured traffic. Each carries a tag: `measured`
 **Traffic:** <page views / requests / sessions per day, if any call site is
 traffic-driven — and whether it's growing. Say "no traffic-driven call sites" if
 there are none.>
-**Plan tier:** <tier> — <monthly quota> calls/month
+**Plan:** <plan name> — <monthly quota> calls/month
 **Measured usage:** <n> calls this month from `X-Monthly-RateLimit-Remaining` or
 the Spiffy settings page, or "not available — figures below are estimates">
 **Stack:** <language, framework, scheduler>
@@ -163,7 +163,7 @@ Integration type: <generic shape — e.g. "warehouse sync", "fulfilment listener
 Auth model:      <API key | OAuth app>
 Merchants:       <1 | a handful | tens | hundreds+>
 Scale:           <order of magnitude only — e.g. "tens of thousands of orders">
-Plan tier:       <tier>
+Plan:            <plan name>
 Est. usage:      <n> calls/month against a <quota> quota (<n>%)
 
 WHAT WE COULDN'T GET WORKING

@@ -200,7 +200,7 @@ immediately, and it explains the shape of the problem better than a percentage.
 
 Then total, rank by share of total, and compare against both ceilings:
 
-- The **monthly quota** for their plan tier (see `api-capabilities.md` — note
+- The **monthly quota** for their plan (see `api-capabilities.md` — note
   Business is 20,000 and sits *below* Scale).
 - Peak **burst** against 100 requests per 60 seconds — which is scoped per
   account, not per key, so other integrations on the same merchant share it.
@@ -221,7 +221,7 @@ Always establish:
 1. What the integration is for, in a sentence or two.
 2. How many Spiffy accounts or merchants it serves, and roughly how many records
    are in the resources it syncs.
-3. Their plan tier, and their measured usage if they were able to get it.
+3. Their plan, and their measured usage if they were able to get it.
 4. **The traffic figure for every traffic-driven call site you found** — page
    views, requests, sessions or active users per day, whichever matches how the
    call is triggered. Ask for a rough daily number and whether it is growing.

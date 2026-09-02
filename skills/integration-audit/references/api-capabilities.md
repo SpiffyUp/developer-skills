@@ -73,25 +73,17 @@ allowance, and every integration installed on a merchant draws from the same
 pool. An integration comfortably inside the limit alone can start failing the
 day a second one is installed.
 
-The spec publishes the three current plans. The enforced set is larger:
-
-| Tier | Plan name | Monthly requests |
-|---|---|---|
-| `pro_yr`, `pro_mo` | Pro | 10,000 |
-| `highvol_yr`, `highvol_mo` | Business | 20,000 |
-| `scale_yr`, `scale_mo` | Scale | 50,000 |
-| `founders_yr`, `founders_mo` | Founders (legacy) | 10,000 |
-| `compd`, `compd_native` | — | 10,000 |
-| `sandbox` | — | 10,000 |
-| `inactive` | — | 0 — every request 429s |
+The API reference publishes the current plan allowances. Two things about them
+matter for an audit.
 
 **Business is 20,000 and sits below Scale despite sounding larger.** Do not
 reason from the plan name.
 
-An account on a tier not in that table is treated as **0** until an override is
-set, and an account can carry an individual override in either direction. So
-**read `X-Monthly-RateLimit-Limit` from a live response** rather than assuming
-the table — it is the only reliable statement of a given account's allowance.
+**Read `X-Monthly-RateLimit-Limit` from a live response rather than any
+published table.** An account's allowance can differ from its plan's listed
+figure in either direction, and not every account maps to a listed plan — some
+have no allowance at all. The header is the only reliable statement of a given
+account's limit, and it costs nothing to check.
 
 Published documentation stated 200,000 for the Business plan for a period. If a
 developer sized their integration against that figure, their budget is out by an

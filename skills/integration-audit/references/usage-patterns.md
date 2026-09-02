@@ -67,7 +67,7 @@ Apply it literally.
 For an irreducible call, the finding — if there is one — is capacity, not
 design. Size it (`sessions per day x 30`), state what it costs, and say plainly
 that it cannot be reduced. If that number alone approaches the quota, the answer
-is a tier change or a different architecture, not a code fix, and pretending
+is a plan change or a different architecture, not a code fix, and pretending
 otherwise wastes the developer's time.
 
 **The middle case: reduce the frequency, not the call.** Some per-user reads are
@@ -335,5 +335,5 @@ optimising further, because the fix may not be in this repository at all.
 ### W6 — Health checks and liveness probes against a real endpoint
 
 A monitor hitting a data endpoint every minute is 43,200 requests a month —
-more than the 10,000 and 20,000 tier allowances outright, and 86% of the 50,000
-tier, spent entirely on checking that the API is up.
+more than the two smaller plan allowances outright and most of the largest one,
+spent entirely on checking that the API is up.
