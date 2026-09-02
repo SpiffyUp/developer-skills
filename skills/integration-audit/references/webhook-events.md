@@ -173,8 +173,9 @@ same code.
 
 ### Order-family payloads carry a superset of a bare GET
 
-For `order:*`, `payment:*`, `product:*`, `upsell:*`, `payment_plan:*` and
-`promo:*`, `data.object` is a **v2 order**, loaded with these expansions:
+For `order:*`, `payment:*`, `upsell:*` and `payment_plan:*`, plus the two
+order-shaped events `product:purchased` and `promo:applied`, `data.object` is a
+**v2 order**, loaded with these expansions:
 
 ```
 items, payments, subscriptions, paymentplans, checkout, checkoutview
@@ -190,28 +191,44 @@ webhook-only:
 
 - **`checkout`** — the published offer configuration the order was bought
   against.
-- **`checkoutview`** — UTM and attribution data for the visit that converted.
+- **`checkoutview`** — UTM data for the visit that converted.
 
 Both are ordinary opt-in expanders on `GET`, but neither appears in a default
-`GET` response. They ship in every order-family webhook.
+`GET` response. They ship in every order-shaped webhook.
 
-The practical consequence: **an order-family webhook receiver generally needs
+The practical consequence: **an order-shaped webhook receiver generally needs
 zero follow-up API calls.** If you find a handler that receives `order:success`
 and then calls `GET /v2/orders/{id}`, or fetches the customer, items, payments,
-subscriptions, payment plans, checkout or attribution separately, those calls
-are redundant — the data is already in the body it was handed.
+subscriptions, payment plans or checkout separately, those calls are redundant —
+the data is already in the body it was handed.
+
+**The one exception is `attribution`.** The `attribution` expander returns
+first- and last-touch data, which is a different dataset from `checkoutview`'s
+converting-visit UTMs, and it is **not** in the webhook payload. A receiver that
+needs first-touch attribution genuinely does have to call
+`GET /v2/orders/{id}?include=attribution`. Do not report that call as redundant.
 
 ### What the other families deliver
 
 Do not generalize the order payload to the rest. Each family has its own primary
 object:
 
-| Event family | `data.object` |
+| Event | `data.object` |
 |---|---|
-| `order:*`, `payment:*`, `product:*`, `upsell:*`, `payment_plan:*`, `promo:*` | v2 order with the six expansions above |
+| `order:*`, `payment:*`, `upsell:*`, `payment_plan:*`, `product:purchased`, `promo:applied` | v2 order with the six expansions above |
 | `subscription:*` | The subscription object, plus an embedded `customer` |
 | `card:*` | The card, with internal `sources` stripped, plus an embedded `customer` |
-| `customer:*`, `affiliate:*` | The customer object |
+| `customer:*` | The customer object |
+| `product:created`, `product:updated`, `product:deleted` | The product object |
+| `promo:created`, `promo:updated`, `promo:deleted` | The promo object |
+| `affiliate:updated` | The affiliate object |
+| `affiliate:registered` | The customer object |
+
+**Read the CRUD rows carefully.** `product:purchased` and `promo:applied`
+deliver an *order*, because they describe a purchase; the `created`/`updated`/
+`deleted` events for those same resources deliver the resource itself. An
+integration mirroring the product or promo catalog wants the CRUD events, and
+their payload is the object it is mirroring — no follow-up call needed.
 
 The embedded `customer` on subscription and card payloads is the base customer
 serialization (id, account_id, email, name, company, tax id, timestamps). It is
@@ -331,8 +348,12 @@ Consequences, all of them permanent:
 
 **Any recommendation to replace polling with webhooks must pair the webhook with
 a low-frequency reconciliation sweep** — a periodic list call filtered on
-`updated_at.gte` (supported on orders and subscriptions), run hourly or daily,
-to catch whatever the webhook path missed.
+`updated_at.gte` (supported on customers, orders, payments, subscriptions,
+paymentplans, products, affiliates and checkouts — see `api-capabilities.md`),
+run hourly or daily, to catch whatever the webhook path missed.
+
+`promos` is the exception: it takes no filters at all, so a promo sweep is a
+full re-read of the active set. Keep it, but run it rarely.
 
 The reason is one sentence: recommending webhooks without a safety net gets the
 reader burned during an outage, and the loss is silent and permanent.
@@ -446,8 +467,9 @@ mistake. Do not suggest a fix that does not exist.
 ## Endpoint management
 
 Developers can self-serve their webhook configuration through the API. All
-routes require OAuth with the `webhooks` scope, and every endpoint is scoped to
-the authenticated OAuth client.
+routes below require OAuth with the `webhooks` scope except
+`GET /v2/webhook-event-types`, which needs no authentication, and every endpoint
+is scoped to the authenticated OAuth client.
 
 | Route | Purpose |
 |---|---|

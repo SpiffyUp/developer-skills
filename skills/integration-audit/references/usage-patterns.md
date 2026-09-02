@@ -333,4 +333,5 @@ optimising further, because the fix may not be in this repository at all.
 ### W6 — Health checks and liveness probes against a real endpoint
 
 A monitor hitting a data endpoint every minute is 43,200 requests a month —
-more than any tier's quota, spent entirely on checking that the API is up.
+more than the 10,000 and 20,000 tier allowances outright, and 86% of the 50,000
+tier, spent entirely on checking that the API is up.

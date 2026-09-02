@@ -147,7 +147,7 @@ ignored (see [The silent-ignore contract](#the-silent-ignore-contract)).
 | `GET /v2/orders` | `id`, `customer_id`, `checkout_publish_id`, `checkout_id`, `currency`, `display_total`, `promo_id`, `created_at`, `updated_at` | `updated_at` |
 | `GET /v2/subscriptions` | `id`, `status`, `order_id`, `customer_id`, `email`, `product_id`, `product_option_price_id`, `created_at`, `updated_at`, `next_payment_at` | `updated_at` |
 | `GET /v2/paymentplans` | `id`, `status`, `order_id`, `customer_id`, `email`, `created_at`, `updated_at`, `next_payment_at` | `updated_at` |
-| `GET /v2/payments` | `status`, `order_id`, `customer_id`, `gateway_id`, `currency`, `created_at` | **none — `created_at` only** |
+| `GET /v2/payments` | `status`, `order_id`, `customer_id`, `gateway_id`, `currency`, `created_at`, `updated_at` | `updated_at` |
 | `GET /v2/products` | `id`, `name`, `stripe_product_id`, `is_taxable`, `is_commissionable`, `is_subscription`, `use_options`, `created_at`, `updated_at` | `updated_at` |
 | `GET /v2/affiliates` | `id`, `email`, `name_first`, `name_last`, `slug`, `paypal_email`, `is_ready_for_payout`, `created_at`, `updated_at` | `updated_at` |
 | `GET /v2/checkouts` | `status`, `product_id`, `created_at`, `updated_at` | `updated_at` |
@@ -167,10 +167,6 @@ ignored (see [The silent-ignore contract](#the-silent-ignore-contract)).
 
 Exceptions and traps in that table:
 
-- **`/v2/payments` has no `updated_at` filter.** It filters on `created_at` only.
-  A refund, dispute or status change on an older payment is therefore invisible to
-  a `created_at`-based delta — the row's creation date has not moved. Payment state
-  changes must come from webhooks, or from a periodic full resync.
 - **`/v2/promos` does not paginate and takes no filters.** It returns every active
   promo for the account in one `{ "data": [...] }` response with no `meta`. Do not
   send `page`/`per_page`; they do nothing.
@@ -179,11 +175,19 @@ Exceptions and traps in that table:
 - **The webhook event lists read plain query params.** `?status=failed` works;
   `?filter[status]=failed` does not. `status` accepts only `pending`, `delivered`,
   `failed` — any other value is ignored and the list comes back unfiltered.
-- **`/v2/checkouts` defaults to `status=active`.** Sending any `status` filter
-  replaces that default rather than narrowing it. `product_id` supports equality
-  only; an operator suffix on it returns 400.
-- **`/v2/events` `created_at` only.** Events are append-only, so `created_at.gte`
-  is the correct delta key here.
+- **`/v2/checkouts` defaults to `status=active`, and only a top-level `status`
+  param clears it.** `?status=expired` replaces the default. `?filter[status]=expired`
+  does **not** — the default stays and is ANDed with it, so the query asks for rows
+  that are both active and expired and silently returns nothing. This is the one
+  place in the API where the two filter syntaxes are not equivalent. `product_id`
+  supports equality only; an operator suffix on it returns 400.
+- **`/v2/events` `created_at` only.** Events are append-only. `created_at.gte`
+  works, and `id.gte` with `sort=id` is a stricter cursor with no clock-boundary
+  risk.
+- **`/v2/events?subscription_id` caps at 20 values** and returns 400 above that,
+  so the general "chunk `.in` at 100" advice does not apply to it. It also expands
+  each id backwards along the subscription's swap chain, so the rows returned
+  cover earlier subscriptions too — wider than what was asked for.
 
 Enum values accepted by the status filters:
 
@@ -200,7 +204,7 @@ bad value once and read the 400 — it lists them all.
 
 ### Incremental sync
 
-For the six resources with an `updated_at` filter, `?filter[updated_at.gte]=<last
+For every resource with an `updated_at` filter, `?filter[updated_at.gte]=<last
 run>` combined with `sort=updated_at` is the intended sync pattern and usually
 turns a full page-through into a handful of calls per day.
 
@@ -246,18 +250,19 @@ overall.
 ## Search support
 
 `search=` performs a case-insensitive substring match across a fixed set of
-columns for that endpoint. It is honoured on exactly four endpoints:
+columns for that endpoint. It is honoured on exactly five endpoints:
 
 | Endpoint | Fields searched |
 |---|---|
 | `GET /v2/customers` | first name, last name, email |
 | `GET /v2/affiliates` | first name, last name, email, slug, PayPal email |
 | `GET /v2/checkouts` | internal name, offer name |
+| `GET /v2/products` | name, description |
 | `GET /v2/customers/:customer_id/cards` | last four, cardholder first name, cardholder last name |
 
 **Everywhere else `search=` is silently ignored** and the endpoint returns the
 unfiltered list. There is no search on orders, subscriptions, paymentplans,
-payments, products, promos, events, or any webhook list.
+payments, promos, events, or any webhook list.
 
 One behavioural detail: a multi-word search ORs every term across every field, so
 `search=john smith` matches rows containing *either* word. It broadens the result
@@ -317,9 +322,8 @@ GET /v2/affiliates/payouts/:payout_id/download
 ```
 
 Returns `text/csv` containing every commission row in that payout, with no
-pagination and no `per_page` ceiling — one request and one quota unit, instead of
-one request per page of `GET /v2/affiliates/payouts`. Use it whenever the goal is
-the full commission set for a payout rather than a filtered slice.
+pagination and no `per_page` ceiling — one request and one quota unit. There is
+no paginated commission-row endpoint at all, so this is the only way to get them.
 
 **A report run export**, covering the six report types documented below. The
 download itself is unmetered, so a full pull costs roughly four requests at any
@@ -421,12 +425,16 @@ call from the developer's backend and no quota cost at any traffic level:
 | `subscription` | `ref` (required), `token` | One subscription's management view |
 | `payment-plan` | `ref` (required), `token` | One payment plan's management view |
 
-Elements mount on insertion, so client-side route changes need no extra step.
+Elements are discovered by a document scan when SpiffyJS boots, with a short
+retry window after load. An element inserted later by a client-side route change
+is **not** picked up automatically — check how the developer's framework mounts
+before recommending this for a single-page application.
 
 `token` is a per-user SSO magic-link token that signs the customer or affiliate
-in directly; without it the element shows a login form. Minting that token is one
-call per user session and is **irreducible** — the token is single-use and
-short-lived, so it cannot be cached or shared. `ref` is resolved the same way.
+in directly; without it the element shows a login form. This catalog does not
+describe how a token is minted — if an integration already mints one, treat that
+call as **irreducible**: the token is per user, single-use and short-lived, so it
+cannot be cached or shared between visitors. `ref` is resolved the same way.
 
 This replaces a hand-built portal, not a data feed. Where a developer needs the
 values inside their own interface, it is not a substitute — the API read is the
@@ -435,10 +443,10 @@ right call and the fix is to scope or cache it, not to embed.
 ## Rate limits and quotas
 
 Two independent limiters run on v2 requests, both keyed by **account**. They meter
-traffic authenticated with an account API key. An approved third-party developer
-application is metered against its own allocation, set when developer access is
-granted; the limits below are still the right numbers to design against, because
-any integration a merchant installs with their own key lands squarely on them.
+traffic authenticated with an account API key. Traffic authenticated as an
+approved third-party developer application is not metered by these two limiters.
+The numbers below are still the right ones to design against, because any
+integration a merchant installs with their own key lands squarely on them.
 
 ### What counts as one request
 

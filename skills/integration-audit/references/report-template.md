@@ -18,7 +18,8 @@ nuance> — <one line on why, naming the weakest input the numbers rest on>
 
 Volume figures are estimates derived from source code and from answers given
 during the audit, not from measured traffic. Each carries a tag: `measured`
-(from code), `stated` (from the developer), or `assumed` (a default).
+(from configuration in the project, or from a live response header), `stated`
+(from the developer), or `assumed` (a default).
 
 ## Snapshot
 

@@ -43,10 +43,19 @@ suspicion is reasonable — address it up front rather than waiting to be asked.
 
 ## Before you start — establish your mode
 
-1. Load the reference files from this skill's `references/` directory:
-   `api-capabilities.md`, `webhook-events.md`, `usage-patterns.md`,
-   `diagnosis.md`, `security-checks.md`. If you cannot fetch URLs, ask the user
-   to paste them.
+1. Load all six reference files. If this skill is installed locally they are in
+   its `references/` directory. If you reached this file over HTTP, fetch them
+   from the same location:
+
+   - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/api-capabilities.md`
+   - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/webhook-events.md`
+   - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/usage-patterns.md`
+   - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/diagnosis.md`
+   - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/security-checks.md`
+   - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/report-template.md`
+
+   If you can neither read nor fetch them, ask the user to paste them. Do not
+   continue without them.
 2. Try to read the project's source.
 3. Set your mode:
 
@@ -209,8 +218,8 @@ Always establish:
 
 Then, for each dominant call site, ask the two questions that matter:
 
-4. **What does this feed, and how fresh does it actually need to be?**
-5. **Why this approach?** — did they consider an alternative, try one and hit a
+6. **What does this feed, and how fresh does it actually need to be?**
+7. **Why this approach?** — did they consider an alternative, try one and hit a
    problem, or find there wasn't one?
 
 And if they aren't using webhooks for something a webhook covers, ask directly
@@ -313,7 +322,7 @@ file on their disk and what you say to them.
 | Thought | Reality |
 |---|---|
 | "Most APIs support sparse fieldsets, so I'll suggest `?fields=`" | It's reserved and unimplemented. Check the catalog. |
-| "There must be a `customer:updated` event" | There isn't. Absence of an event is a feedback finding. |
+| "There must be a `subscription:updated` event" | There isn't — only the 14 lifecycle transitions. Absence of an event is a feedback finding. |
 | "This is obviously a polling antipattern, I'll write it up" | You don't yet know why they built it. Ask first. |
 | "They should just use webhooks" | If they already tried and failed, that's our bug, not their fix. |
 | "I'll estimate roughly 10k calls/month" | Show the arithmetic or don't state the number. |
