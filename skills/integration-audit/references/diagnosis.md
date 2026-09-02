@@ -25,15 +25,15 @@ Do this before anything else, because these are wrong in ways the developer
 cannot see. They are not style problems; they are correctness bugs that also cost
 money.
 
-**Check every filter key against the allowed-filter table** in
-`api-capabilities.md`, for that exact resource. An unrecognized key is dropped
+**Check every filter key against the spec**, for that exact resource path — a
+key absent from that path's `parameters` array does not work. An unrecognized key is dropped
 silently and the request returns 200 with the full unfiltered list. Nothing in
 the response, the status code, or the developer's logs indicates the filter did
 nothing. A key that looks obviously right — `state` for `status`, or a field that
 exists on the object but isn't filterable — will sail through review.
 
-**Check every webhook event name** against `webhook-events.md`. A subscription to
-an event that doesn't exist simply never fires.
+**Check every webhook event name** against `GET /v2/webhook-event-types`. A
+subscription to an event that doesn't exist simply never fires.
 
 **Check every `include=`, `search=`, and `sort=` value** the same way. All are
 silently ignored where unsupported.

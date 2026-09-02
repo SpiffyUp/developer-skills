@@ -43,7 +43,16 @@ suspicion is reasonable — address it up front rather than waiting to be asked.
 
 ## Before you start — establish your mode
 
-1. Load all six reference files. If this skill is installed locally they are in
+1. **The live API reference is the source of truth for the API surface.** Read
+   what you need from it as you go:
+
+   - Spec: `https://api.spiffy.co/openapi.json` — large, so fetch the paths you
+     are auditing rather than the whole document. A path's `parameters` array is
+     the authoritative list of its filters and expansions.
+   - Rendered guide: `https://developers.spiffy.co/api/getting-started`
+   - Webhook events: `GET /v2/webhook-event-types`, no auth required.
+
+2. Load all six reference files. If this skill is installed locally they are in
    its `references/` directory. If you reached this file over HTTP, fetch them
    from the same location:
 
@@ -54,15 +63,16 @@ suspicion is reasonable — address it up front rather than waiting to be asked.
    - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/security-checks.md`
    - `https://raw.githubusercontent.com/SpiffyUp/developer-skills/main/skills/integration-audit/references/report-template.md`
 
-   If you can neither read nor fetch them, ask the user to paste them. Do not
-   continue without them.
-2. Try to read the project's source.
-3. Set your mode:
+   They carry method and behaviour, not API surface. If you can neither read nor
+   fetch them, ask the user to paste them. Do not continue without them.
+3. Try to read the project's source.
+4. Set your mode:
 
    - **Full** — references loaded and source readable.
    - **Interview-only** — references loaded, source unreadable. Every volume
      figure comes from the user and is tagged `stated`.
-   - **Blocked** — references unavailable. Say so and stop.
+   - **Blocked** — you can reach neither the live spec nor the references. Say so
+     and stop.
 
 **In Blocked mode, stop.** Do not proceed from memory. You do not know Spiffy's
 filter keys, event names, or limits, and the failure mode is not a vague answer —
@@ -72,15 +82,19 @@ State your mode to the user before continuing, and record it in the report.
 
 ## Hard rules
 
-- Never claim a capability absent from `api-capabilities.md`. That catalog is
-  closed-world.
-- Never recommend a webhook event absent from `webhook-events.md`.
+- **Never claim a capability you have not just read in the spec.** A parameter
+  absent from a path's `parameters` array does not work — it is not merely
+  undocumented. Check the exact endpoint; do not generalise from another
+  resource, from REST convention, or from memory.
+- **Never recommend a webhook event absent from `GET /v2/webhook-event-types`.**
+  Call it. A subscription to an event that does not exist is accepted and never
+  fires.
 - Never assert a call volume without showing its inputs and arithmetic.
 - Every figure carries a confidence tag: `measured`, `stated`, or `assumed`.
 - A finding without `file:line` evidence goes under "Needs confirmation", not
   among the findings.
-- If a resource's filter or `include=` support is not in the catalog, write "not
-  covered by this catalog" rather than inferring it.
+- If you could not check a resource's filter or `include=` support against the
+  spec, write "not verified" rather than inferring it.
 - **Never conclude from a code pattern alone why it was written.** Establish the
   reason before assigning a fix to anyone.
 - **Never flag an irreducible per-occurrence call.** A call is only a finding if
@@ -129,7 +143,8 @@ handler, or manual.
 ### 3. Verify what the code believes about the API
 
 Step 1 of `diagnosis.md`, and it comes before everything else. Check every filter
-key, event name, `include=`, `search=` and `sort=` value against the catalogs.
+key, event name, `include=`, `search=` and `sort=` value against the live
+spec and the event-types endpoint.
 These fail silently and return 200, so the developer has no way to notice.
 
 ### 4. Determine what multiplies each call site
@@ -185,7 +200,8 @@ immediately, and it explains the shape of the problem better than a percentage.
 
 Then total, rank by share of total, and compare against both ceilings:
 
-- The **monthly quota** for their plan tier (see `api-capabilities.md`).
+- The **monthly quota** for their plan tier (see `api-capabilities.md` — note
+  Business is 20,000 and sits *below* Scale).
 - Peak **burst** against 100 requests per 60 seconds — which is scoped per
   account, not per key, so other integrations on the same merchant share it.
 
@@ -253,7 +269,8 @@ only the fix hides the part Spiffy needs to hear.
 
 ### 8. Webhook migration pass
 
-For each polled resource, check `webhook-events.md` for coverage.
+For each polled resource, check `GET /v2/webhook-event-types` for coverage, and
+`webhook-events.md` for what the payload will contain.
 
 Customers, products and promos have a full `created`/`updated`/`deleted` set,
 and affiliates have `registered` and `updated`. These are recent, so a poll
@@ -321,7 +338,7 @@ file on their disk and what you say to them.
 
 | Thought | Reality |
 |---|---|
-| "Most APIs support sparse fieldsets, so I'll suggest `?fields=`" | It's reserved and unimplemented. Check the catalog. |
+| "Most APIs support sparse fieldsets, so I'll suggest `?fields=`" | It's reserved and unimplemented. Check the spec. |
 | "There must be a `subscription:updated` event" | There isn't — only the 14 lifecycle transitions. Absence of an event is a feedback finding. |
 | "This is obviously a polling antipattern, I'll write it up" | You don't yet know why they built it. Ask first. |
 | "They should just use webhooks" | If they already tried and failed, that's our bug, not their fix. |
@@ -336,5 +353,6 @@ file on their disk and what you say to them.
 | "It's one call, it's fine" | One call times their daily traffic is the whole quota. Cost it. |
 | "They should cache this" | Their portal SSO token can't be cached. Apply the irreducible test first. |
 | "Add caching" (and stop there) | Spiffy sets no ETag or Cache-Control. The cache has to be theirs — say so. |
-| "There's no `customer:updated` event" | There is now. Re-read `webhook-events.md` instead of recalling it. |
+| "There's no `customer:updated` event" | There is now. Call `/v2/webhook-event-types` instead of recalling it. |
+| "The catalog doesn't list this filter" | The catalogs no longer list filters. The spec does. Go read it. |
 | "Their numbers don't add up to the measured total" | That gap is a finding. Something else is on the same quota. |

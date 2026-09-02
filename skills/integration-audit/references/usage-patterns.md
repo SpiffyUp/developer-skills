@@ -185,8 +185,8 @@ the events, and if it does, say so in the finding.
 
 **Fix:** `filter[updated_at.gte]=<last successful run>`, using the last
 *successful* run rather than a fixed window so an outage widens the next sweep
-automatically. Check the per-resource table in `api-capabilities.md` — most
-resources support it, and `promos` supports no filters at all.
+automatically. Confirm the resource supports it by checking that path's
+`parameters` in the spec — most do, and `promos` supports no filters at all.
 
 ### S3 — A cadence tighter than the data can change, or than the need
 
@@ -227,8 +227,8 @@ A list, then a loop of single fetches. Cost is the page size, per page.
 
 **Fix, in order of preference:** `include=` on the list endpoint if the relation
 is expandable — one request for what the loop was doing in a hundred. Failing
-that, `filter[id.in]` in chunks of 100. Both are in `api-capabilities.md`; check
-the endpoint actually supports the expansion before recommending it, because an
+that, `filter[id.in]` in chunks of 100. Check the endpoint's `parameters` in the
+spec for the expansions it actually supports before recommending one, because an
 unsupported `include=` value is silently dropped rather than rejected.
 
 ### D3 — Fetching everything to use a fraction
@@ -246,8 +246,10 @@ Paging orders or payments to compute revenue, counts, or a time series.
 
 **Fix:** the analytics endpoint answers these in one request, including grouped
 time series and period-over-period comparison. For large exact datasets, a
-report run's export download is the cheapest bulk path in the API. Confirm the
-metric or report type exists in `api-capabilities.md` before promising it.
+report run's export download is the cheapest bulk path in the API — the download
+itself is unmetered, so a full pull costs about four requests at any size.
+Confirm the metric or report type exists by calling `GET /v2/analytics/capabilities`
+or `GET /v2/reports/types` before promising it.
 
 ---
 

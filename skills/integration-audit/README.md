@@ -88,8 +88,11 @@ It's safe to share as-is. What you do with it is entirely your call.
 Volume figures are estimated from your source and your answers, not measured from
 real traffic. Every number is tagged `measured`, `stated`, or `assumed`.
 
-The skill works from a fixed catalog of what the v2 API supports and is instructed
-not to invent capabilities that aren't in it. If it tells you something that
+The skill reads endpoints, parameters and event names live from
+[the OpenAPI spec](https://api.spiffy.co/openapi.json) and
+`GET /v2/webhook-event-types`, rather than a bundled copy that drifts, and it's
+instructed not to claim a capability it hasn't just checked there. What it
+bundles is behaviour the spec can't state. If it tells you something that
 doesn't match the current API, that's a bug on our side — let us know.
 
 ## Docs
