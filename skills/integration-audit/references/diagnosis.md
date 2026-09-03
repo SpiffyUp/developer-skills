@@ -25,15 +25,15 @@ Do this before anything else, because these are wrong in ways the developer
 cannot see. They are not style problems; they are correctness bugs that also cost
 money.
 
-**Check every filter key against the allowed-filter table** in
-`api-capabilities.md`, for that exact resource. An unrecognized key is dropped
+**Check every filter key against the spec**, for that exact resource path — a
+key absent from that path's `parameters` array does not work. An unrecognized key is dropped
 silently and the request returns 200 with the full unfiltered list. Nothing in
 the response, the status code, or the developer's logs indicates the filter did
 nothing. A key that looks obviously right — `state` for `status`, or a field that
 exists on the object but isn't filterable — will sail through review.
 
-**Check every webhook event name** against `webhook-events.md`. A subscription to
-an event that doesn't exist simply never fires.
+**Check every webhook event name** against `GET /v2/webhook-event-types`. A
+subscription to an event that doesn't exist simply never fires.
 
 **Check every `include=`, `search=`, and `sort=` value** the same way. All are
 silently ignored where unsupported.
@@ -43,6 +43,39 @@ because the estimate is a floor — you are measuring what the code *thinks* it
 fetches, not what it actually fetches.
 
 ## Step 2 — Find where the cost is
+
+### Measure before you estimate
+
+Every response carries `X-Monthly-RateLimit-Remaining`. Two readings an hour
+apart give the account's real consumption rate — no arithmetic, no assumptions,
+and it includes traffic this codebase cannot see: other integrations, dashboard
+activity, MCP tool calls, non-production environments on the same key. The
+merchant's Spiffy settings show the same figure with a projection.
+
+Ask for it early. An estimate from source is a *floor* — it describes what this
+code intends to send, not what the account spends. When the measured total is
+much larger than the sum of the call sites you found, the gap is the finding,
+and further optimisation of this repository may be aimed at the wrong target
+entirely.
+
+### Name the multiplier for each call site
+
+Cost is `calls per occurrence x occurrences per day x 30`. An occurrence is
+whatever makes the call happen again, and there are five kinds — scheduled,
+traffic, data, event, fixed. `usage-patterns.md` has the taxonomy and the
+patterns that go with each.
+
+Get this right before costing anything, because it is where the order of
+magnitude lives. A scheduled call site's multiplier is written in the repository
+and is bounded. A traffic-driven one lives in the developer's analytics, is
+invisible in the code, and rises with their success — which is why an
+integration that was comfortable for a year fails in a week, and why the
+accounts that exhaust a quota in days almost always have one.
+
+If you cannot find a multiplier in the code, that is a question for the
+interview, not a number to invent.
+
+### Then rank
 
 Build the call budget, rank by share of total, and work down from the top.
 
@@ -55,6 +88,25 @@ silently does nothing, a delta that misses rows, a sync that is quietly wrong �
 is a finding regardless of what it costs, because the developer is acting on bad
 data and doesn't know it. When the two rules disagree, correctness wins. Rank by
 volume, but say plainly that the severity is correctness rather than cost.
+
+### Some per-occurrence calls cannot be reduced
+
+Before writing up any call that runs once per user, session or request, apply
+this test:
+
+> **A per-occurrence call is only a finding if the same answer would serve more
+> than one occurrence.**
+
+Minting a portal SSO token is per user, single-use and short-lived by design —
+it cannot be cached, cannot be shared, and caching it would be a security bug. A
+write the user just requested is the same. For calls like these the finding, if
+any, is capacity rather than design: size it, say plainly that it is
+irreducible, and move on. Recommending a fix for something the developer knows
+is unavoidable costs you the credibility you need for the findings that matter.
+
+The middle case is the valuable one. A read that is irreducible *per session*
+but is happening *per request* is a real finding, and the fix is to change its
+scope rather than remove it.
 
 ## Step 3 — Establish intent
 
@@ -137,25 +189,22 @@ recommend a fix that doesn't exist.
 
 ## Signals worth looking at
 
-Starting points, not a checklist. They tell you where to *look*; steps 3 to 5
-tell you what it means. Something not on this list is not thereby fine, and
-something on it is not thereby a finding.
+**`usage-patterns.md` is the catalog**, organised by what multiplies each call.
+Work through it once the multipliers are named. It is a set of starting points,
+not a checklist: a pattern there tells you where to *look*, and steps 3 to 5 tell
+you what it means. Something not in it is not thereby fine, and something in it
+is not thereby a finding.
 
-- Polling on a schedule for something a webhook already pushes
-- Re-fetching a resource inside a webhook handler when the payload already
-  carries it — order-family payloads arrive pre-expanded
-- One request per item after a list request
-- A paging loop with no delta filter, where the resource supports one
-- `per_page` left at the default
-- A cadence far tighter than the data can change, or than the stated need
-- Retrying into a 429, or ignoring `Retry-After`
-- A wide rolling date window standing in for a delta filter
-- Client-side filtering, joining, or deduping of a full result set
-- Records joined on email rather than a stored Spiffy id, or `search=` used to
-  resolve identity — a correctness and security problem before it's a cost one
-- A local mirror rebuilt by re-fetching rather than updated from event payloads
-- Webhook writes with no idempotency key, or that assume delivery order
-- Anything with a comment explaining why it's odd — read the comment, then ask
+Two shapes deserve attention beyond their cost, because neither announces
+itself:
+
+- **A Spiffy call on a path the developer's own users trigger** — a request
+  handler, a page render, middleware, a component mount, a browser interval.
+  These are the ones that exhaust a quota in days, and they look small in the
+  code because the multiplier is nowhere near them.
+- **Anything with a comment explaining why it's odd.** Read the comment, then
+  ask. It is usually a compressed account of something that did not work, which
+  is exactly what step 4 is trying to recover.
 
 ## Measure against the recommended shape
 

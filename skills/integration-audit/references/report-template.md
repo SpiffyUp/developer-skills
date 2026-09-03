@@ -18,24 +18,36 @@ nuance> — <one line on why, naming the weakest input the numbers rest on>
 
 Volume figures are estimates derived from source code and from answers given
 during the audit, not from measured traffic. Each carries a tag: `measured`
-(from code), `stated` (from the developer), or `assumed` (a default).
+(from configuration in the project, or from a live response header), `stated`
+(from the developer), or `assumed` (a default).
 
 ## Snapshot
 
 **What this integration does:** <one or two sentences, in the developer's words>
 **Scale:** <N merchants/accounts, N orders, N customers, N subscriptions>
-**Plan tier:** <tier> — <monthly quota> calls/month
+**Traffic:** <page views / requests / sessions per day, if any call site is
+traffic-driven — and whether it's growing. Say "no traffic-driven call sites" if
+there are none.>
+**Plan:** <plan name> — <monthly quota> calls/month
+**Measured usage:** <n> calls this month from `X-Monthly-RateLimit-Remaining` or
+the Spiffy settings page, or "not available — figures below are estimates">
 **Stack:** <language, framework, scheduler>
 **Webhooks configured today:** <yes/no — which events, or what stopped them>
 
 ## Where the calls go
 
-| Endpoint | Trigger | Est. calls/month | % of total | Evidence |
-|---|---|---|---|---|
-| `GET /v2/orders` | cron `*/5 * * * *` | 8,640 `measured` | 71% | `sync.js:14` |
-| <endpoint> | <trigger> | <n> `<tag>` | <n>% | `<file:line>` |
+| Endpoint | Driver | Trigger / multiplier | Est. calls/month | % of total | Evidence |
+|---|---|---|---|---|---|
+| `GET /v2/orders` | scheduled | cron `*/5 * * * *` | 8,640 `measured` | 24% | `sync.js:14` |
+| `GET /v2/customers/:id` | traffic | 3 × 1,200 page views/day | 108,000 `stated` | 75% | `middleware/auth.js:22` |
+| <endpoint> | <driver> | <multiplier> | <n> `<tag>` | <n>% | `<file:line>` |
 
 **Total estimated:** <n> calls/month
+
+<If a measured figure is available and differs materially from this total, say so
+here and say which is larger. A measured total well above the estimate means
+something outside this codebase is drawing on the same account quota — name it as
+a finding rather than leaving the discrepancy unexplained.>
 
 ## Call budget
 
@@ -45,8 +57,13 @@ during the audit, not from measured traffic. Each carries a tag: `measured`
 | Peak burst | <n>/min | 100/min | <n> |
 
 <What this means, in a sentence or two. If over quota, lead with it and say what
-actually happens at runtime. Note that the per-minute limit is per account, not
-per API key — other integrations on the same merchant share it.>
+actually happens at runtime. Note that both limits are per account, not per API
+key — other integrations, internal tools and MCP connector usage on the same
+merchant share them.>
+
+<If demand exceeds the monthly allowance, give the days-to-exhaustion figure:
+`allowance ÷ (calls per occurrence × occurrences per day)`. It describes the
+failure the developer actually experiences better than a percentage over.>
 
 ## What you can change
 
@@ -146,7 +163,7 @@ Integration type: <generic shape — e.g. "warehouse sync", "fulfilment listener
 Auth model:      <API key | OAuth app>
 Merchants:       <1 | a handful | tens | hundreds+>
 Scale:           <order of magnitude only — e.g. "tens of thousands of orders">
-Plan tier:       <tier>
+Plan:            <plan name>
 Est. usage:      <n> calls/month against a <quota> quota (<n>%)
 
 WHAT WE COULDN'T GET WORKING

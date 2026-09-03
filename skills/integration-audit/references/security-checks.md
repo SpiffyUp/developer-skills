@@ -50,7 +50,7 @@ to the `Spiffy-Signature` header, no `createHmac`, no signing secret.
 
 **Why:** the endpoint is a public URL. Without verification, anyone who finds it
 can post a forged `order:success` and cause whatever that event triggers —
-fulfilment, entitlement grants, account credit.
+fulfilment, access provisioning, account credit.
 
 **Say:** verify before doing anything with the payload. The header is
 `Spiffy-Signature: t=<unix>,v1=<hex>`; the signature is HMAC-SHA256 over
@@ -120,6 +120,22 @@ checkoutview.
 
 ---
 
+## S7 — Mishandled OAuth refresh tokens
+
+Only applies to integrations using OAuth rather than an account API key.
+
+**Look for:** a stored refresh token that is reused, or retry logic that replays a
+refresh request after a failure.
+
+**Why:** refresh tokens are **single-use** and rotate on every refresh. Replaying
+a consumed one fails, and an integration that doesn't persist the new token
+locks itself out and needs re-authorization.
+
+**Say:** persist the new refresh token atomically on every refresh, and don't
+retry a refresh with a token that has already been sent.
+
+---
+
 ## S8 — Resolving Spiffy records from user-supplied input
 
 **Look for:** a request handler that takes an email, order id, or customer id
@@ -148,19 +164,3 @@ the first result may be someone else. If you must look up by email, use the exac
 filter `filter[email]=` — and see the note on identity keys in
 `webhook-events.md`, because email is a poor identifier even when matched
 exactly.
-
----
-
-## S7 — Mishandled OAuth refresh tokens
-
-Only applies to integrations using OAuth rather than an account API key.
-
-**Look for:** a stored refresh token that is reused, or retry logic that replays a
-refresh request after a failure.
-
-**Why:** refresh tokens are **single-use** and rotate on every refresh. Replaying
-a consumed one fails, and an integration that doesn't persist the new token
-locks itself out and needs re-authorization.
-
-**Say:** persist the new refresh token atomically on every refresh, and don't
-retry a refresh with a token that has already been sent.

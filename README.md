@@ -10,7 +10,7 @@ install, nothing to execute.
 
 | Skill | What it does |
 |---|---|
-| [`integration-audit`](./skills/integration-audit) | Where your API calls go, what they cost against your quota, and what you can cut |
+| [`integration-audit`](./skills/integration-audit) | Where your API calls go, what they cost against your quota, and what you can cut — including the per-visit calls that burn a month's quota in days |
 
 ## Using one
 
@@ -29,10 +29,15 @@ Skills carry decision rules and the traps that aren't obvious from the docs. For
 the technical detail — endpoints, parameters, payloads — they point you at
 [developers.spiffy.co](https://developers.spiffy.co).
 
-Where a skill does carry a list of API specifics, it's because that list is what
-an AI will otherwise invent. Those lists are generated from our source and
-stamped with a date. If one disagrees with the current API, that's our bug —
-tell us.
+Endpoints, parameters and event names are read live from
+[the OpenAPI spec](https://api.spiffy.co/openapi.json) and from
+`GET /v2/webhook-event-types`, so a skill doesn't carry a copy that can go stale
+as the API moves.
+
+What a skill does carry is behaviour a spec can't state — which mistakes fail
+silently, which calls are irreducible, what a well-built integration looks like.
+If one of those tells you something that doesn't match the current API, that's
+our bug — tell us.
 
 ## Privacy
 
